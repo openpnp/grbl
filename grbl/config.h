@@ -31,7 +31,7 @@
 
 
 // Default settings. Used when resetting EEPROM. Change to desired name in defaults.h
-#define DEFAULTS_OPENPNP
+#define DEFAULTS_GENERIC
 
 // Serial baud rate
 #define BAUD_RATE 115200
