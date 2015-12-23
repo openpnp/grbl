@@ -1,8 +1,8 @@
 #  Part of Grbl
 #
 #  Copyright (c) 2009-2011 Simen Svale Skogsrud
-#  Copyright (c) 2012 Sungeun K. Jeon
 #  Copyright (c) 2014 Bob Beattie
+#  Copyright (c) 2012-2015 Sungeun K. Jeon
 #
 #  Grbl is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -31,34 +31,37 @@
 
 DEVICE     ?= atmega2560
 CLOCK      = 16000000
-PROGRAMMER ?= -c wiring -P /dev/tty.usbmodem1411
-OBJECTS    = main.o motion_control.o gcode.o spindle_control.o coolant_control.o serial.o \
-             protocol.o stepper.o eeprom.o settings.o planner.o nuts_bolts.o limits.o \
-             print.o probe.o report.o system.o
+PROGRAMMER ?= -c avrisp2 -P usb
+SOURCE    = main.c motion_control.c gcode.c spindle_control.c coolant_control.c serial.c \
+             protocol.c stepper.c eeprom.c settings.c planner.c nuts_bolts.c limits.c \
+             print.c probe.c report.c system.c
+BUILDDIR = build
+SOURCEDIR = grbl
 # FUSES      = -U hfuse:w:0xd9:m -U lfuse:w:0x24:m
 FUSES      = -U hfuse:w:0xd2:m -U lfuse:w:0xff:m
 
 # Tune the lines below only if you know what you are doing:
 
-AVRDUDE = avrdude $(PROGRAMMER) -p $(DEVICE) -b 115200 -D
-COMPILE = avr-gcc -Wall -Os -DF_CPU=$(CLOCK) -mmcu=$(DEVICE) -I. -ffunction-sections
+AVRDUDE = avrdude $(PROGRAMMER) -p $(DEVICE) -B 10 -F
+COMPILE = avr-gcc -Wall -Os -DF_CPU=$(CLOCK) -mmcu=$(DEVICE) -I. -ffunction-sections -fdata-sections
+
+OBJECTS = $(addprefix $(BUILDDIR)/,$(notdir $(SOURCE:.c=.o)))
 
 # symbolic targets:
 all:	grbl.hex
 
-.c.o:
-	$(COMPILE) -c $< -o $@
-	@$(COMPILE) -MM  $< > $*.d
+$(BUILDDIR)/%.o: $(SOURCEDIR)/%.c
+	$(COMPILE) -MMD -MP -c $< -o $@
 
 .S.o:
-	$(COMPILE) -x assembler-with-cpp -c $< -o $@
+	$(COMPILE) -x assembler-with-cpp -c $< -o $(BUILDDIR)/$@
 # "-x assembler-with-cpp" should not be necessary since this is the default
 # file type for the .S (with capital S) extension. However, upper case
 # characters are not always preserved on Windows. To ensure WinAVR
 # compatibility define the file type manually.
 
-.c.s:
-	$(COMPILE) -S $< -o $@
+#.c.s:
+	$(COMPILE) -S $< -o $(BUILDDIR)/$@
 
 flash:	all
 	$(AVRDUDE) -U flash:w:grbl.hex:i
@@ -74,25 +77,25 @@ load: all
 	bootloadHID grbl.hex
 
 clean:
-	rm -f grbl.hex main.elf $(OBJECTS) $(OBJECTS:.o=.d)
+	rm -f grbl.hex $(BUILDDIR)/*.o $(BUILDDIR)/*.d $(BUILDDIR)/*.elf
 
 # file targets:
-main.elf: $(OBJECTS)
-	$(COMPILE) -o main.elf $(OBJECTS) -lm -Wl,--gc-sections
+$(BUILDDIR)/main.elf: $(OBJECTS)
+	$(COMPILE) -o $(BUILDDIR)/main.elf $(OBJECTS) -lm -Wl,--gc-sections
 
-grbl.hex: main.elf
+grbl.hex: $(BUILDDIR)/main.elf
 	rm -f grbl.hex
-	avr-objcopy -j .text -j .data -O ihex main.elf grbl.hex
-	avr-size --format=berkeley main.elf
+	avr-objcopy -j .text -j .data -O ihex $(BUILDDIR)/main.elf grbl.hex
+	avr-size --format=berkeley $(BUILDDIR)/main.elf
 # If you have an EEPROM section, you must also create a hex file for the
 # EEPROM and add it to the "flash" target.
 
 # Targets for code debugging and analysis:
 disasm:	main.elf
-	avr-objdump -d main.elf
+	avr-objdump -d $(BUILDDIR)/main.elf
 
 cpp:
-	$(COMPILE) -E main.c
+	$(COMPILE) -E $(SOURCEDIR)/main.c
 
 # include generated header dependencies
--include $(OBJECTS:.o=.d)
+-include $(BUILDDIR)/$(OBJECTS:.o=.d)
